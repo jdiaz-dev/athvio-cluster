@@ -1,0 +1,190 @@
+service: athvio-cluster
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage}
+  deploymentBucket:
+    blockPublicAccess: true
+  stackTags:
+    domain-name: athvio
+    system-name: athvio-cluster
+    shared-resource: false
+    environment: ${self:custom.environments.${opt:stage, 'develop'}}
+    provider: aws
+  # environment:
+  #   SERVICE_ENVIRONMENT: ${self:custom.environments.${opt:stage,'develop'}}
+  #   DEFAULT_CONSUMER_ID: ${file(catalog-info.yaml):metadata.name}
+
+resources:
+  Parameters:
+    ClusterName:
+      Type: String
+      Default: athvio-cluster
+    AppContainerPort:
+      Type: Number
+      Description: Container port of app requiring LoadBalancer exposure
+      Default: 57343
+    ClientIp:
+      Type: String
+      Description: Client IP
+      Default: "3.212.129.180/32"
+    Environment:
+      Type: String
+      Description: Environment
+      Default: "0.0.0.0/0"
+    AppIp:
+      Type: String
+      Description: AppIp network
+      Default: "10.0.0.0/8"
+    AppIp2:
+      Type: String
+      Description: Port1
+      Default: "172.16.0.0/12"
+    AppIp3:
+      Type: String
+      Description: Port2
+      Default: "192.168.0.0/16"
+    Cidr:
+      Type: String
+      Description: Port2
+      Default: "10.0.0.0/16"
+    PublicSubnetCidr:
+      Type: String
+      Description: CIDR block for the public subnet
+      Default: "10.0.1.0/24"
+    CustomOrigin:
+      Type: String
+      Description: CustomOrigin
+      Default: "::/0"
+
+  Resources:
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: !Ref Cidr
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: athvio-cluster-vpc
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: athvio-cluster-igw
+
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: !Ref PublicSubnetCidr
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: athvio-public-subnet
+
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: athvio-public-route-table
+
+    PublicRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        DestinationCidrBlock: "0.0.0.0/0"
+        GatewayId: !Ref InternetGateway
+
+    SubnetRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PublicSubnet
+        RouteTableId: !Ref PublicRouteTable
+
+    SecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security Group for fargate
+        VpcId: !Ref VPC # ${self:custom.VPC.${self:provider.region}.${opt:stage}}
+        Tags:
+          - Key: Name
+            Value: athvio-cluster-security-group
+
+    ContainerSecurityGroupSelfIngress1:
+      Type: AWS::EC2::SecurityGroupIngress
+      Properties:
+        Description: "Security group ingress from ${self:resources.Parameters.AppContainerPort.Default} to ${self:resources.Parameters.AppContainerPort.Default} CIDR: ${self:resources.Parameters.Environment.Default}"
+        GroupId: !Ref SecurityGroup
+        IpProtocol: tcp
+        FromPort: !Ref AppContainerPort
+        ToPort: !Ref AppContainerPort
+        CidrIp: !Ref Environment
+
+    ContainerSecurityGroupSelfEgressMongodb:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        Description: "Security group egress to all CIDR: ${self:resources.Parameters.Environment.Default}"
+        GroupId: !Ref SecurityGroup
+        IpProtocol: "-1"
+        CidrIp: !Ref Environment
+
+    # ContainerSecurityGroupSelfEgress2:
+    #   Type: AWS::EC2::SecurityGroupEgress
+    #   Properties:
+    #     Description: "Security group egress to all CIDR: ${self:resources.Parameters.CustomOrigin.Default}"
+    #     GroupId: !Ref SecurityGroup
+    #     IpProtocol: "-1"
+    #     CidrIpv6: !Ref CustomOrigin
+    Cluster:
+      Type: "AWS::ECS::Cluster"
+      Properties:
+        ClusterName: !Ref ClusterName
+        CapacityProviders:
+          - FARGATE
+        ClusterSettings:
+          - Name: "containerInsights"
+            Value: "enabled"
+
+  Outputs:
+    VPCId:
+      Value: !Ref VPC
+      Export:
+        Name: athvioVpcId
+
+    PublicSubnetId:
+      Value: !Ref PublicSubnet
+      Export:
+        Name: athvioPublicSubnetId
+
+    SecurityGroupId:
+      Value: !Ref SecurityGroup
+      Export:
+        Name: athvioSecurityGroupId
+    ClusterName:
+      Value: !Ref ClusterName
+      Export:
+        Name: athvioClusterName
+custom:
+  environments:
+    develop: develop
+    staging: staging
+    prodblue: production
+  VPC:
+    us-east-1:
+      develop: vpc-096382d9498b7f09f
+
+# config ips
+
