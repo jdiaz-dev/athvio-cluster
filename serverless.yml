@@ -13,9 +13,6 @@ provider:
     shared-resource: false
     environment: ${self:custom.environments.${opt:stage, 'develop'}}
     provider: aws
-  # environment:
-  #   SERVICE_ENVIRONMENT: ${self:custom.environments.${opt:stage,'develop'}}
-  #   DEFAULT_CONSUMER_ID: ${file(catalog-info.yaml):metadata.name}
 
 resources:
   Parameters:
@@ -26,38 +23,18 @@ resources:
       Type: Number
       Description: Container port of app requiring LoadBalancer exposure
       Default: 57343
-    ClientIp:
-      Type: String
-      Description: Client IP
-      Default: "3.212.129.180/32"
     Environment:
       Type: String
       Description: Environment
       Default: "0.0.0.0/0"
-    AppIp:
-      Type: String
-      Description: AppIp network
-      Default: "10.0.0.0/8"
-    AppIp2:
-      Type: String
-      Description: Port1
-      Default: "172.16.0.0/12"
-    AppIp3:
-      Type: String
-      Description: Port2
-      Default: "192.168.0.0/16"
     Cidr:
       Type: String
-      Description: Port2
+      Description: CIDR block for the VPC
       Default: "10.0.0.0/16"
     PublicSubnetCidr:
       Type: String
       Description: CIDR block for the public subnet
       Default: "10.0.1.0/24"
-    CustomOrigin:
-      Type: String
-      Description: CustomOrigin
-      Default: "::/0"
 
   Resources:
     VPC:
@@ -118,36 +95,28 @@ resources:
       Type: AWS::EC2::SecurityGroup
       Properties:
         GroupDescription: Security Group for fargate
-        VpcId: !Ref VPC # ${self:custom.VPC.${self:provider.region}.${opt:stage}}
+        VpcId: !Ref VPC
         Tags:
           - Key: Name
             Value: athvio-cluster-security-group
 
-    ContainerSecurityGroupSelfIngress1:
+    SecurityGroupIngress:
       Type: AWS::EC2::SecurityGroupIngress
       Properties:
-        Description: "Security group ingress from ${self:resources.Parameters.AppContainerPort.Default} to ${self:resources.Parameters.AppContainerPort.Default} CIDR: ${self:resources.Parameters.Environment.Default}"
+        Description: "Security group ingress throught HTTP"
         GroupId: !Ref SecurityGroup
         IpProtocol: tcp
         FromPort: !Ref AppContainerPort
         ToPort: !Ref AppContainerPort
         CidrIp: !Ref Environment
 
-    ContainerSecurityGroupSelfEgressMongodb:
+    SecurityGroupSelfEgressMongodb:
       Type: AWS::EC2::SecurityGroupEgress
       Properties:
-        Description: "Security group egress to all CIDR: ${self:resources.Parameters.Environment.Default}"
+        Description: "Security group egress to mongodb database"
         GroupId: !Ref SecurityGroup
         IpProtocol: "-1"
         CidrIp: !Ref Environment
-
-    # ContainerSecurityGroupSelfEgress2:
-    #   Type: AWS::EC2::SecurityGroupEgress
-    #   Properties:
-    #     Description: "Security group egress to all CIDR: ${self:resources.Parameters.CustomOrigin.Default}"
-    #     GroupId: !Ref SecurityGroup
-    #     IpProtocol: "-1"
-    #     CidrIpv6: !Ref CustomOrigin
     Cluster:
       Type: "AWS::ECS::Cluster"
       Properties:
@@ -182,9 +151,6 @@ custom:
     develop: develop
     staging: staging
     prodblue: production
-  VPC:
-    us-east-1:
-      develop: vpc-096382d9498b7f09f
 
 # config ips
 
