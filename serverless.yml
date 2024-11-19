@@ -34,7 +34,7 @@ resources:
     PublicSubnetCidr:
       Type: String
       Description: CIDR block for the public subnet
-      Default: "10.0.1.0/24"
+      Default: "10.0.255.0/16"
 
   Resources:
     VPC:
