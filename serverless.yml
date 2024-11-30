@@ -154,4 +154,5 @@ custom:
 
 # config ips
 # what is route table
-# practical difference between subnet route table association and route table
+# todo: practical difference between subnet route table association and route table
+# todo: realize test with cidr and multiple internet block
